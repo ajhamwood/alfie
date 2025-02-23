@@ -15,3 +15,8 @@ Artificial life meta-explorer
 * What about individual variability in both value and structure of content?
 * What about the existence of conserved properties? Are these merely statements derivable from expression?
 * What about transformation of the manifold?
+
+# Process
+* Seek examples of artificial life to incorporate into framework
+* This is a chill, low-impact project for me to relax with
+* UI design should reflect an organic, in-progress design process - I'm going to be a bit artistic and extra in the design too

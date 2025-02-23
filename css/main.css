@@ -1,0 +1,58 @@
+@font-face {
+  font-family: HarrietText;
+  src: url('../fonts/HarrietText-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap }
+@font-face {
+  font-family: HarrietText;
+  src: url('../fonts/HarrietText-Bold.woff2') format('woff2');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap }
+@font-face {
+  font-family: HarrietText;
+  src: url('../fonts/HarrietText-Italic.woff2') format('woff2');
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap }
+
+@font-face {
+  font-family: CartographSans;
+  src: url('../fonts/CartographSansCF-Regular.woff2') format('woff2');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap }
+@font-face {
+  font-family: CartographSans;
+  src: url('../fonts/CartographSansCF-Bold.woff2') format('woff2');
+  font-weight: bold;
+  font-style: normal;
+  font-display: swap }
+@font-face {
+  font-family: CartographSans;
+  src: url('../fonts/CartographSansCF-Italic.woff2') format('woff2');
+  font-weight: normal;
+  font-style: italic;
+  font-display: swap }
+
+
+  html, body {
+    height: 100dvh }
+  body, button, select, input, textarea { font-family: HarrietText }
+  h1, h2, h3, h4, h5, h6 { font-family: CartographSans }
+  main { padding-bottom: 15em }
+  figure.epigraph { margin: 2em 3em }
+  figure.example { text-align: center }
+    blockquote {
+      margin: auto;
+      text-align: justify }
+    figure.epigraph > figcaption { text-align: right }
+    figure.example > figcaption { text-align: center }
+  section { margin: 5em 10% }
+    div.section-body {
+      columns: 30em;
+      column-gap: 3em;
+      text-align: justify }
+
+  #canvas1-1 { aspect-ratio: 1/1 }

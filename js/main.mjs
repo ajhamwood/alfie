@@ -43,7 +43,7 @@ class Universe {
 class Manifold {
 
   // Global structures
-  static WrappedGrid = (dimX, dimY, convFn) => (getLocal, pop) => {
+  static SquareTorus = (dimX, dimY, convFn) => (getLocal, pop) => {
     for (let x = 0; x < dimX; x++) for (let y = 0; y < dimY; y++) {
       const neighbourhood = getLocal((dx, dy) => pop.content(Common.mod(x + dx, dimX) * dimY + Common.mod(y + dy, dimY)).get());
       pop.content(x * dimY + y).set(convFn(neighbourhood))
@@ -55,7 +55,7 @@ class Manifold {
   }
 
   // Local structures
-  static GridDiagAdjacency = (() => {
+  static MooreNeighbourhood = (() => {
     const conv1D = [-1, 0, 1];
     return getRelative => conv1D.map(dx => conv1D.map(dy => getRelative(dx, dy)))
   })()
@@ -116,11 +116,13 @@ class Visualiser {
     canvas; #context
     dimX; dimY; unit
     constructor (dimX, dimY, cvs) {
-      this.canvas = cvs
+      this.canvas = cvs;
       this.#context = cvs.getContext('2d');
       this.dimX = dimX;
       this.dimY = dimY;
-      const { height, width } = cvs, unit = Math.min(Math.round(height / dimX), Math.round(width / dimY));
+      cvs.style.width = "100%";
+      const { offsetHeight, offsetWidth } = cvs, unit = Math.min(Math.floor(offsetHeight / dimX), Math.floor(offsetWidth / dimY));
+      cvs.style.width = "";
       this.unit = unit;
       cvs.height = unit * dimX;
       cvs.width = unit * dimY
@@ -160,18 +162,22 @@ $.targets({
   load () { app.emit("init") },
   app: {
     init () {
+      for (const cvs of $.all("canvas")) {
+        cvs.width = cvs.offsetWidth;
+        cvs.height = cvs.offsetHeight
+      }
       const
         dimX = 100, dimY = 100,
         convFn = ar => {
           const [s] = ar[1].splice(1, 1), c = ar.flat().reduce((a, v) => a + v, 0);
           return c === 3 || s && c === 2
         },
-        globalShape = Manifold.WrappedGrid(dimX, dimY, convFn),
-        localShape = Manifold.GridDiagAdjacency,
+        globalShape = Manifold.SquareTorus(dimX, dimY, convFn),
+        localShape = Manifold.MooreNeighbourhood,
         manifold = new Manifold({ globalShape, localShape }),
         content = Population.BinaryPopulation(dimX * dimY),
         population = new Population({ content }),
-        context = new Visualiser.Context2D(dimX, dimY, $("canvas")),
+        context = new Visualiser.Context2D(dimX, dimY, $("#canvas1-1")),
         colouring = Visualiser.Colouring2State,
         visualiser = new Visualiser({ context, colouring }),
         universe = this.universe = new Universe({ manifold, population, visualiser });
