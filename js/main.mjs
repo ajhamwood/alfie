@@ -17,23 +17,34 @@ class ErrorCode {
 
 
 class Universe {
-  manifold; population; visualiser
-  constructor ({ manifold, population, visualiser }) {
+
+  manifold; population; visualiser; interacter; params; size
+  pausePromise; pauseResolver
+  constructor ({ manifold, population, visualiser, interacter, params }) {
+    this.params = params;
     if (!(Manifold.prototype.isPrototypeOf(manifold))) throw new ErrorCode({ code: 1, data: "Manifold" });
-    this.manifold = manifold;
+    this.manifold = manifold.bind(this);
     if (!(Population.prototype.isPrototypeOf(population))) throw new ErrorCode({ code: 1, data: "Population" });
-    this.population = population;
+    this.population = population.bind(this);
     if (!(Visualiser.prototype.isPrototypeOf(visualiser))) throw new ErrorCode({ code: 1, data: "Visualiser" });
-    this.visualiser = visualiser
+    this.visualiser = visualiser.bind(this);
+    if (!(Interacter.prototype.isPrototypeOf(interacter))) throw new ErrorCode({ code: 1, data: "Interacter" });
+    this.interacter = interacter.bind(this)
   }
+
   initialise () { this.population.seed() }
+
   async run (steps) {
     for (let t = 0; t < steps; t++) {
-      const expressed = this.manifold.step(this.manifold.conv, this.population);
+      const expressed = this.manifold.step();
       this.visualiser.draw(expressed);
+      await this.pausePromise;
       await new Promise(requestAnimationFrame)
     }
   }
+
+  pause () { this.pausePromise = new Promise(r => this.pauseResolver = r) }
+
 }
 
 
@@ -43,14 +54,18 @@ class Universe {
 class Manifold {
 
   // Global structures
-  static SquareTorus = (dimX, dimY, convFn) => (getLocal, pop) => {
-    for (let x = 0; x < dimX; x++) for (let y = 0; y < dimY; y++) {
-      const neighbourhood = getLocal((dx, dy) => pop.content(Common.mod(x + dx, dimX) * dimY + Common.mod(y + dy, dimY)).get());
-      pop.content(x * dimY + y).set(convFn(neighbourhood))
-    }
-    pop.flush();
-    return function * () {
-      for (let x = 0; x < dimX; x++) for (let y = 0; y < dimY; y++) yield { x, y, value: pop.content(x * dimY + y).get() }
+  static SquareTorus = univ => {
+    univ.size = univ.params[0] * univ.params[1];
+    return () => {
+      const { manifold, population, params: [ dimX, dimY ] } = univ;
+      for (let x = 0; x < dimX; x++) for (let y = 0; y < dimY; y++) {
+        const neighbourhood = manifold.nbh((dx, dy) => population.content(Common.mod(x + dx, dimX) * dimY + Common.mod(y + dy, dimY)).state);
+        population.content(x * dimY + y).state = manifold.conv(neighbourhood)
+      }
+      population.flush();
+      return function * () {
+        for (let x = 0; x < dimX; x++) for (let y = 0; y < dimY; y++) yield { x, y, state: population.content(x * dimY + y).state }
+      }
     }
   }
 
@@ -60,12 +75,21 @@ class Manifold {
     return getRelative => conv1D.map(dx => conv1D.map(dy => getRelative(dx, dy)))
   })()
 
-  step; conv
-  constructor ({ globalShape, localShape }) {
+  #universe; #globalShape
+  step; nbh; conv
+  constructor ({ globalShape, localShape, convolutionFn }) {
     if (!(Function.prototype.isPrototypeOf(globalShape))) throw new ErrorCode({ code: 2 });
-    this.step = globalShape;
+    this.#globalShape = globalShape;
     if (!(Function.prototype.isPrototypeOf(localShape))) throw new ErrorCode({ code: 2 });
-    this.conv = localShape
+    this.nbh = localShape;
+    if (!(Function.prototype.isPrototypeOf(convolutionFn))) throw new ErrorCode({ code: 2 });
+    this.conv = convolutionFn
+  }
+
+  bind (universe) {
+    this.#universe = universe;
+    this.step = this.#globalShape(universe);
+    return this
   }
 }
 
@@ -76,32 +100,54 @@ class Manifold {
 class Population {
 
   // Perfect information populations
-  static BinaryPopulation = size => {
-    const words = Math.ceil(size / 8), array = new Uint8Array(words), tempAr = new Uint8Array(words);
+  static BinaryPopulation = univ => {
+    const { size } = univ, words = Math.ceil(size / 8), array = new Uint8Array(words), tempAr = new Uint8Array(words);
     return {
+      // TODO: batch (for parallelisation)
       seed: () => {
-        for (let i = 0; i < words; i++) array[i] = Math.floor(Math.random() * 256);
+        for (let i = 0; i < words; i++) array[i] = Math.floor(Math.random() * 256)
       },
-      content: address => {
-        const rem = address % 8, quot = (address - rem) / 8;
-        return {
-          set (b) { tempAr[quot] |= b << rem },
-          get () { return (array[quot] >> rem) & 1 }
+      content: (() => {
+        let rem, quot;
+        const vObj = {
+          set state (b) { tempAr[quot] |= b << rem },
+          get state () { return (array[quot] >> rem) & 1 }
+        };
+        return address => {
+          rem = address % 8, quot = (address - rem) / 8
+          return vObj
         }
-      },
+      })(),
       flush: () => {
         array.set(tempAr);
         tempAr.fill(0, 0, words - 1)
+      },
+      stats: {
+        set size (_) {},
+        get size () {
+          let c = 0;
+          for (let v of array) for (; v; c++) v &= v - 1;
+          return c
+        }
       }
     }
   }
 
-  seed; flush = () => {}; content
-  constructor ({ content: { content, flush, seed } }) {
+  #universe
+  seed; flush = () => {}; #content; stats
+  constructor ({ content }) {
     if (!(Function.prototype.isPrototypeOf(content))) throw new ErrorCode({ code: 2 });
+    this.#content = content
+  }
+
+  bind (universe) {
+    this.#universe = universe;
+    const { content, flush, seed, stats } = this.#content(universe);
     this.content = content;
     this.flush = flush;
-    this.seed = seed
+    this.seed = seed;
+    this.stats = stats;
+    return this
   }
 }
 
@@ -113,26 +159,37 @@ class Visualiser {
 
   // Visualisation region
   static Context2D = class {
-    canvas; #context
-    dimX; dimY; unit
-    constructor (dimX, dimY, cvs) {
+
+    canvas; #context; unit; #lastGen
+    constructor (cvs) {
       this.canvas = cvs;
-      this.#context = cvs.getContext('2d');
-      this.dimX = dimX;
-      this.dimY = dimY;
+      this.#context = cvs.getContext('2d')
+    }
+
+    resize ([ dimX, dimY ]) { // Unit is naturals and reciprocal of naturals
+      const { canvas: cvs } = this;
+      cvs.removeAttribute("height");
+      cvs.removeAttribute("width");
+      cvs.parentNode.host.style.width = "100%";
       cvs.style.width = "100%";
-      const { offsetHeight, offsetWidth } = cvs, unit = Math.min(Math.floor(offsetHeight / dimX), Math.floor(offsetWidth / dimY));
+      const { offsetHeight, offsetWidth } = cvs, unit = offsetHeight < dimX && offsetWidth < dimY ?
+        1 / Math.max(Math.ceil(dimX / offsetHeight), Math.ceil(dimY / offsetWidth)) :
+        Math.min(Math.floor(offsetHeight / dimX), Math.floor(offsetWidth / dimY));
+      cvs.parentNode.host.style.width = "";
       cvs.style.width = "";
       this.unit = unit;
       cvs.height = unit * dimX;
       cvs.width = unit * dimY
     }
-    draw (gen, colouring) {
+
+    draw (colouring, gen = this.#lastGen) {
+      this.#lastGen = gen;
       const { unit } = this, ctx = this.#context;
       colouring(ctx, fn => {
-        for (const { x, y, value } of gen()) fn(value, x, y, unit)
+        for (const { x, y, state } of gen()) fn(state, x, y, unit)
       })
     }
+
   }
 
   // Visualisation style
@@ -142,48 +199,91 @@ class Visualiser {
     cb((value, x, y, unit) => value && ctx.fillRect(x * unit, y * unit, unit, unit))
   }
 
+  #universe
   context; colouring
   constructor ({ context, colouring }) {
     this.context = context;
     this.colouring = colouring
   }
-  draw (gen) {
-    this.context.draw(gen, this.colouring)
+
+  bind (universe) {
+    this.#universe = universe;
+    this.context.resize(universe.params);
+    return this
+  }
+
+  resize () {
+    this.context.resize(this.#universe.params);
+    // TODO: await intersection callback (latest only)
+    this.context.draw(this.colouring)
+  }
+  draw (gen) { this.context.draw(this.colouring, gen) }
+}
+
+
+
+// Define interactive parameters
+
+class Interacter {
+  #universe
+  constructor ({}) {}
+
+  bind (universe) {
+    this.#universe = universe;
+    this.createUI();
+    return this
+  }
+
+  async createUI () {
+    const univ = this.#universe
   }
 }
 
 
 
 const app = self.app = new $.Machine({
-  universe: null
+  examples: []
 });
 
 $.targets({
+
   load () { app.emit("init") },
+
+  resize () { for (const example of app.examples) example.visualiser.resize() },
+
   app: {
     init () {
-      for (const cvs of $.all("canvas")) {
-        cvs.width = cvs.offsetWidth;
-        cvs.height = cvs.offsetHeight
-      }
       const
-        dimX = 100, dimY = 100,
-        convFn = ar => {
+        convolutionFn = ar => {
           const [s] = ar[1].splice(1, 1), c = ar.flat().reduce((a, v) => a + v, 0);
           return c === 3 || s && c === 2
         },
-        globalShape = Manifold.SquareTorus(dimX, dimY, convFn),
+        globalShape = Manifold.SquareTorus,
         localShape = Manifold.MooreNeighbourhood,
-        manifold = new Manifold({ globalShape, localShape }),
-        content = Population.BinaryPopulation(dimX * dimY),
+        manifold = new Manifold({ globalShape, localShape, convolutionFn }),
+        content = Population.BinaryPopulation,
         population = new Population({ content }),
-        context = new Visualiser.Context2D(dimX, dimY, $("#canvas1-1")),
+        context = new Visualiser.Context2D($("canvas", $("#iu1-1").shadowRoot)),
         colouring = Visualiser.Colouring2State,
         visualiser = new Visualiser({ context, colouring }),
-        universe = this.universe = new Universe({ manifold, population, visualiser });
+        interacter = new Interacter({}),
+        params = [ 1000, 1000 ],
+        universe = new Universe({ manifold, population, visualiser, interacter, params });
+      this.examples.push(universe);
       console.log(this.state());
       universe.initialise();
       universe.run(500)
     }
   }
+
+});
+
+$.queries({
+  "#master-pause": {
+    click () { for (const example of app.examples) example.pause() }
+  }
+});
+
+$.loadWc("interactive-universe", {
+  constructor () {}
 })

@@ -41,6 +41,10 @@
     height: 100dvh }
   body, button, select, input, textarea { font-family: HarrietText }
   h1, h2, h3, h4, h5, h6 { font-family: CartographSans }
+  header {
+    position: fixed;
+    right: 0 }
+    header > :last-child { margin-right: 2em }
   main { padding-bottom: 15em }
   figure.epigraph { margin: 2em 3em }
   figure.example { text-align: center }
@@ -54,5 +58,3 @@
       columns: 30em;
       column-gap: 3em;
       text-align: justify }
-
-  #canvas1-1 { aspect-ratio: 1/1 }
